@@ -4,37 +4,36 @@
 use bellpepper_core::{
   boolean::AllocatedBit, num::AllocatedNum, ConstraintSystem, LinearCombination, SynthesisError,
 };
-use core::marker::PhantomData;
-use ff::Field;
 use ff::{PrimeField, PrimeFieldBits};
 use flate2::{write::ZlibEncoder, Compression};
 use nova_snark::{
-  provider::{mlkzg::Bn256EngineKZG, GrumpkinEngine},
+  provider::{PallasEngine, VestaEngine},
   traits::{
     circuit::{StepCircuit, TrivialCircuit},
     snark::RelaxedR1CSSNARKTrait,
-    Engine, Group,
+    Engine,
   },
   CompressedSNARK, PublicParams, RecursiveSNARK,
 };
 use rand::Rng;
+use std::marker::PhantomData;
 use std::time::Instant;
 
-type E1 = Bn256EngineKZG;
-type E2 = GrumpkinEngine;
-type EE1 = nova_snark::provider::mlkzg::EvaluationEngine<E1>;
+type E1 = PallasEngine;
+type E2 = VestaEngine;
+type EE1 = nova_snark::provider::ipa_pc::EvaluationEngine<E1>;
 type EE2 = nova_snark::provider::ipa_pc::EvaluationEngine<E2>;
-type S1 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E1, EE1>; // non-preprocessing SNARK
-type S2 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
+type S1 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E1, EE1>;
+type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>;
 
 #[derive(Clone, Debug)]
-struct AndInstance<G: Group> {
+struct AndInstance<F: PrimeField> {
   a: u64,
   b: u64,
-  _p: PhantomData<G>,
+  _p: PhantomData<F>,
 }
 
-impl<G: Group> AndInstance<G> {
+impl<F: PrimeField> AndInstance<F> {
   // produces an AND instance
   fn new() -> Self {
     let mut rng = rand::thread_rng();
@@ -49,11 +48,11 @@ impl<G: Group> AndInstance<G> {
 }
 
 #[derive(Clone, Debug)]
-struct AndCircuit<G: Group> {
-  batch: Vec<AndInstance<G>>,
+struct AndCircuit<F: PrimeField> {
+  batch: Vec<AndInstance<F>>,
 }
 
-impl<G: Group> AndCircuit<G> {
+impl<F: PrimeField> AndCircuit<F> {
   // produces a batch of AND instances
   fn new(num_ops_per_step: usize) -> Self {
     let mut batch = Vec::new();
@@ -123,23 +122,23 @@ where
   Ok(num)
 }
 
-impl<G: Group> StepCircuit<G::Scalar> for AndCircuit<G> {
+impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for AndCircuit<F> {
   fn arity(&self) -> usize {
     1
   }
 
-  fn synthesize<CS: ConstraintSystem<G::Scalar>>(
+  fn synthesize<CS: ConstraintSystem<F>>(
     &self,
     cs: &mut CS,
-    z_in: &[AllocatedNum<G::Scalar>],
-  ) -> Result<Vec<AllocatedNum<G::Scalar>>, SynthesisError> {
+    z_in: &[AllocatedNum<F>],
+  ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
     for i in 0..self.batch.len() {
       // allocate a and b as field elements
       let a = AllocatedNum::alloc(cs.namespace(|| format!("a_{}", i)), || {
-        Ok(G::Scalar::from(self.batch[i].a))
+        Ok(F::from(self.batch[i].a))
       })?;
       let b = AllocatedNum::alloc(cs.namespace(|| format!("b_{}", i)), || {
-        Ok(G::Scalar::from(self.batch[i].b))
+        Ok(F::from(self.batch[i].b))
       })?;
 
       // obtain bit representations of a and b
@@ -185,7 +184,7 @@ impl<G: Group> StepCircuit<G::Scalar> for AndCircuit<G> {
       let c_from_bits = le_bits_to_num(cs.namespace(|| format!("c_{}", i)), &c_bits)?;
 
       let c = AllocatedNum::alloc(cs.namespace(|| format!("c_{}", i)), || {
-        Ok(G::Scalar::from(self.batch[i].a & self.batch[i].b))
+        Ok(F::from(self.batch[i].a & self.batch[i].b))
       })?;
 
       // enforce that c is correct
@@ -224,7 +223,7 @@ fn main() {
     let pp = PublicParams::<
       E1,
       E2,
-      AndCircuit<<E1 as Engine>::GE>,
+      AndCircuit<<E1 as Engine>::Scalar>,
       TrivialCircuit<<E2 as Engine>::Scalar>,
     >::setup(
       &circuit_primary,
@@ -257,7 +256,7 @@ fn main() {
       .map(|_| AndCircuit::new(num_ops_per_step))
       .collect::<Vec<_>>();
 
-    type C1 = AndCircuit<<E1 as Engine>::GE>;
+    type C1 = AndCircuit<<E1 as Engine>::Scalar>;
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
 
     // produce a recursive SNARK
@@ -288,14 +287,14 @@ fn main() {
     let res = recursive_snark.verify(
       &pp,
       num_steps,
-      &[<E1 as Engine>::Scalar::ZERO],
-      &[<E2 as Engine>::Scalar::ZERO],
+      &[<E1 as Engine>::Scalar::zero()],
+      &[<E2 as Engine>::Scalar::zero()],
     );
     println!("RecursiveSNARK::verify: {:?}", res.is_ok(),);
     assert!(res.is_ok());
 
     // produce a compressed SNARK
-    println!("Generating a CompressedSNARK using Spartan with multilinear KZG...");
+    println!("Generating a CompressedSNARK using Spartan with IPA...");
     let (pk, vk) = CompressedSNARK::<_, _, _, _, S1, S2>::setup(&pp).unwrap();
 
     let start = Instant::now();
@@ -323,8 +322,8 @@ fn main() {
     let res = compressed_snark.verify(
       &vk,
       num_steps,
-      &[<E1 as Engine>::Scalar::ZERO],
-      &[<E2 as Engine>::Scalar::ZERO],
+      &[<E1 as Engine>::Scalar::zero()],
+      &[<E2 as Engine>::Scalar::zero()],
     );
     println!(
       "CompressedSNARK::verify: {:?}, took {:?}",

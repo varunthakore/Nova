@@ -75,7 +75,7 @@ pub trait DlogGroup:
   ) -> Self;
 
   /// Produce a vector of group elements using a static label
-  fn from_label(label: &'static [u8], n: usize) -> Vec<Self::PreprocessedGroupElement>;
+  fn from_label(label: &[u8], n: usize) -> Vec<Self::PreprocessedGroupElement>;
 
   /// Compresses the group element
   fn compress(&self) -> Self::CompressedGroupElement;
@@ -160,7 +160,7 @@ macro_rules! impl_traits {
         self.to_bytes()
       }
 
-      fn from_label(label: &'static [u8], n: usize) -> Vec<Self::PreprocessedGroupElement> {
+      fn from_label(label: &[u8], n: usize) -> Vec<Self::PreprocessedGroupElement> {
         let mut shake = Shake256::default();
         shake.update(label);
         let mut reader = shake.finalize_xof();

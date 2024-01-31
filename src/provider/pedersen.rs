@@ -10,7 +10,7 @@ use crate::{
 use core::{
   fmt::Debug,
   marker::PhantomData,
-  ops::{Add, Mul, MulAssign},
+  ops::{Add, Mul, MulAssign, Sub},
 };
 use ff::Field;
 use rayon::prelude::*;
@@ -24,6 +24,7 @@ where
   E::GE: DlogGroup,
 {
   ck: Vec<<E::GE as DlogGroup>::PreprocessedGroupElement>,
+  h: <E::GE as DlogGroup>::PreprocessedGroupElement, // blinding group element
 }
 
 impl<E> Len for CommitmentKey<E>
@@ -79,6 +80,10 @@ where
     Ok(Commitment {
       comm: comm.unwrap(),
     })
+  }
+
+  fn reinterpret_as_generator(&self) -> <<E as Engine>::GE as DlogGroup>::PreprocessedGroupElement {
+    self.comm.preprocessed()
   }
 }
 
@@ -191,6 +196,20 @@ where
   }
 }
 
+impl<E> Sub for Commitment<E>
+where
+  E: Engine,
+  E::GE: DlogGroup,
+{
+  type Output = Commitment<E>;
+
+  fn sub(self, other: Commitment<E>) -> Commitment<E> {
+    Commitment {
+      comm: self.comm - other.comm,
+    }
+  }
+}
+
 /// Provides a commitment engine
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommitmentEngine<E: Engine> {
@@ -206,16 +225,78 @@ where
   type Commitment = Commitment<E>;
 
   fn setup(label: &'static [u8], n: usize) -> Self::CommitmentKey {
+    let mut blinding_label = label.to_vec();
+    blinding_label.extend(b"blinding factor");
+    let blinding = E::GE::from_label(&blinding_label, 1);
+    let h = blinding.first().unwrap().clone();
+
     Self::CommitmentKey {
       ck: E::GE::from_label(label, n.next_power_of_two()),
+      h,
     }
   }
 
-  fn commit(ck: &Self::CommitmentKey, v: &[E::Scalar]) -> Self::Commitment {
-    assert!(ck.ck.len() >= v.len());
-    Commitment {
-      comm: E::GE::vartime_multiscalar_mul(v, &ck.ck[..v.len()]),
+  fn setup_exact(label: &'static [u8], n: usize) -> Self::CommitmentKey {
+    let mut blinding_label = label.to_vec();
+    blinding_label.extend(b"blinding factor");
+    let blinding = E::GE::from_label(&blinding_label, 1);
+    let h = blinding.first().unwrap().clone();
+
+    Self::CommitmentKey {
+      ck: E::GE::from_label(label, n),
+      h,
     }
+  }
+
+  fn setup_with_blinding(
+    label: &'static [u8],
+    n: usize,
+    h: &<<E as Engine>::GE as DlogGroup>::PreprocessedGroupElement,
+  ) -> Self::CommitmentKey {
+    Self::CommitmentKey {
+      ck: E::GE::from_label(label, n.next_power_of_two()),
+      h: h.clone(),
+    }
+  }
+
+  fn setup_exact_with_blinding(
+    label: &'static [u8],
+    n: usize,
+    h: &<<E as Engine>::GE as DlogGroup>::PreprocessedGroupElement,
+  ) -> Self::CommitmentKey {
+    Self::CommitmentKey {
+      ck: E::GE::from_label(label, n),
+      h: h.clone(),
+    }
+  }
+
+  fn commit(ck: &Self::CommitmentKey, v: &[E::Scalar], r: &E::Scalar) -> Self::Commitment {
+    assert!(ck.ck.len() >= v.len());
+
+    let mut scalars: Vec<E::Scalar> = v.to_vec();
+    scalars.push(*r);
+
+    let mut bases = ck.ck[..v.len()].to_vec();
+    bases.push(ck.h.clone());
+
+    Commitment {
+      comm: E::GE::vartime_multiscalar_mul(&scalars, &bases),
+    }
+  }
+
+  fn from_preprocessed(
+    ck: Vec<<E::GE as DlogGroup>::PreprocessedGroupElement>,
+  ) -> CommitmentKey<E> {
+    let h = E::GE::gen().preprocessed(); // this is irrelevant since we will not use a blind
+    CommitmentKey { ck, h }
+  }
+
+  fn get_gens(ck: &Self::CommitmentKey) -> Vec<<E::GE as DlogGroup>::PreprocessedGroupElement> {
+    ck.ck.clone()
+  }
+
+  fn get_blinding_gen(ck: &Self::CommitmentKey) -> <E::GE as DlogGroup>::PreprocessedGroupElement {
+    ck.h.clone()
   }
 }
 
@@ -239,12 +320,12 @@ where
   /// Scales the commitment key using the provided scalar
   fn scale(&self, r: &E::Scalar) -> Self;
 
-  /// Reinterprets commitments as commitment keys
-  fn reinterpret_commitments_as_ck(
-    c: &[<<<E as Engine>::CE as CommitmentEngineTrait<E>>::Commitment as CommitmentTrait<E>>::CompressedCommitment],
-  ) -> Result<Self, NovaError>
-  where
-    Self: Sized;
+  // /// Reinterprets commitments as commitment keys
+  // fn reinterpret_commitments_as_ck(
+  //   c: &[<<<E as Engine>::CE as CommitmentEngineTrait<E>>::Commitment as CommitmentTrait<E>>::CompressedCommitment],
+  // ) -> Result<Self, NovaError>
+  // where
+  //   Self: Sized;
 }
 
 impl<E> CommitmentKeyExtTrait<E> for CommitmentKey<E>
@@ -256,9 +337,11 @@ where
     (
       CommitmentKey {
         ck: self.ck[0..n].to_vec(),
+        h: self.h.clone(),
       },
       CommitmentKey {
         ck: self.ck[n..].to_vec(),
+        h: self.h.clone(),
       },
     )
   }
@@ -269,7 +352,10 @@ where
       c.extend(other.ck.clone());
       c
     };
-    CommitmentKey { ck }
+    CommitmentKey {
+      ck,
+      h: self.h.clone(),
+    }
   }
 
   // combines the left and right halves of `self` using `w1` and `w2` as the weights
@@ -285,7 +371,10 @@ where
       })
       .collect();
 
-    CommitmentKey { ck }
+    CommitmentKey {
+      ck,
+      h: self.h.clone(),
+    }
   }
 
   /// Scales each element in `self` by `r`
@@ -297,19 +386,22 @@ where
       .map(|g| E::GE::vartime_multiscalar_mul(&[*r], &[g]).preprocessed())
       .collect();
 
-    CommitmentKey { ck: ck_scaled }
+    CommitmentKey {
+      ck: ck_scaled,
+      h: self.h.clone(),
+    }
   }
 
-  /// reinterprets a vector of commitments as a set of generators
-  fn reinterpret_commitments_as_ck(c: &[CompressedCommitment<E>]) -> Result<Self, NovaError> {
-    let d = (0..c.len())
-      .into_par_iter()
-      .map(|i| Commitment::<E>::decompress(&c[i]))
-      .collect::<Result<Vec<Commitment<E>>, NovaError>>()?;
-    let ck = (0..d.len())
-      .into_par_iter()
-      .map(|i| d[i].comm.preprocessed())
-      .collect();
-    Ok(CommitmentKey { ck })
-  }
+  // /// reinterprets a vector of commitments as a set of generators
+  // fn reinterpret_commitments_as_ck(c: &[CompressedCommitment<E>]) -> Result<Self, NovaError> {
+  //   let d = (0..c.len())
+  //     .into_par_iter()
+  //     .map(|i| Commitment::<E>::decompress(&c[i]))
+  //     .collect::<Result<Vec<Commitment<E>>, NovaError>>()?;
+  //   let ck = (0..d.len())
+  //     .into_par_iter()
+  //     .map(|i| d[i].comm.preprocessed())
+  //     .collect();
+  //   Ok(CommitmentKey { ck })
+  // }
 }

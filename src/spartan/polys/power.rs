@@ -2,7 +2,7 @@
 
 use crate::spartan::polys::eq::EqPolynomial;
 use ff::PrimeField;
-use std::iter::successors;
+// use std::iter::successors;
 
 /// Represents the multilinear extension polynomial (MLE) of the equality polynomial $pow(x,t)$, denoted as $\tilde{pow}(x, t)$.
 ///
@@ -16,22 +16,22 @@ pub struct PowPolynomial<Scalar: PrimeField> {
 
 impl<Scalar: PrimeField> PowPolynomial<Scalar> {
   /// Creates a new `PowPolynomial` from a Scalars `t`.
-  pub fn new(t: &Scalar, ell: usize) -> Self {
-    // t_pow = [t^{2^0}, t^{2^1}, ..., t^{2^{ell-1}}]
-    let t_pow = Self::squares(t, ell);
+  // pub fn new(t: &Scalar, ell: usize) -> Self {
+  //   // t_pow = [t^{2^0}, t^{2^1}, ..., t^{2^{ell-1}}]
+  //   let t_pow = Self::squares(t, ell);
 
-    PowPolynomial {
-      eq: EqPolynomial::new(t_pow),
-    }
-  }
+  //   PowPolynomial {
+  //     eq: EqPolynomial::new(t_pow),
+  //   }
+  // }
 
-  /// Create powers the following powers of `t`:
-  /// [t^{2^0}, t^{2^1}, ..., t^{2^{ell-1}}]
-  pub(in crate::spartan) fn squares(t: &Scalar, ell: usize) -> Vec<Scalar> {
-    successors(Some(*t), |p: &Scalar| Some(p.square()))
-      .take(ell)
-      .collect::<Vec<_>>()
-  }
+  // /// Create powers the following powers of `t`:
+  // /// [t^{2^0}, t^{2^1}, ..., t^{2^{ell-1}}]
+  // pub(in crate::spartan) fn squares(t: &Scalar, ell: usize) -> Vec<Scalar> {
+  //   successors(Some(*t), |p: &Scalar| Some(p.square()))
+  //     .take(ell)
+  //     .collect::<Vec<_>>()
+  // }
 
   /// Evaluates the `PowPolynomial` at a given point `rx`.
   ///
@@ -44,14 +44,14 @@ impl<Scalar: PrimeField> PowPolynomial<Scalar> {
     self.eq.evaluate(rx)
   }
 
-  pub fn coordinates(self) -> Vec<Scalar> {
-    self.eq.r
-  }
+  // pub fn coordinates(self) -> Vec<Scalar> {
+  //   self.eq.r
+  // }
 
-  /// Evaluates the `PowPolynomial` at all the `2^|t_pow|` points in its domain.
-  ///
-  /// Returns a vector of Scalars, each corresponding to the polynomial evaluation at a specific point.
-  pub fn evals(&self) -> Vec<Scalar> {
-    self.eq.evals()
-  }
+  // /// Evaluates the `PowPolynomial` at all the `2^|t_pow|` points in its domain.
+  // ///
+  // /// Returns a vector of Scalars, each corresponding to the polynomial evaluation at a specific point.
+  // pub fn evals(&self) -> Vec<Scalar> {
+  //   self.eq.evals()
+  // }
 }

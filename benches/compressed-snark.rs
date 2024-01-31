@@ -19,12 +19,12 @@ type E1 = PallasEngine;
 type E2 = VestaEngine;
 type EE1 = nova_snark::provider::ipa_pc::EvaluationEngine<E1>;
 type EE2 = nova_snark::provider::ipa_pc::EvaluationEngine<E2>;
-// SNARKs without computational commitments
-type S1 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E1, EE1>;
-type S2 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E2, EE2>;
+// zkSNARKs without computational commitments
+type S1 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E1, EE1>;
+type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>;
 // SNARKs with computational commitments
-type SS1 = nova_snark::spartan::ppsnark::RelaxedR1CSSNARK<E1, EE1>;
-type SS2 = nova_snark::spartan::ppsnark::RelaxedR1CSSNARK<E2, EE2>;
+// type SS1 = nova_snark::spartan::ppsnark::RelaxedR1CSSNARK<E1, EE1>;
+// type SS2 = nova_snark::spartan::ppsnark::RelaxedR1CSSNARK<E2, EE2>;
 type C1 = NonTrivialCircuit<<E1 as Engine>::Scalar>;
 type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
 
@@ -43,7 +43,7 @@ cfg_if::cfg_if! {
     criterion_group! {
       name = compressed_snark;
       config = Criterion::default().warm_up_time(Duration::from_millis(3000));
-      targets = bench_compressed_snark, bench_compressed_snark_with_computational_commitments
+      targets = bench_compressed_snark, // bench_compressed_snark_with_computational_commitments
     }
   }
 }
@@ -158,33 +158,33 @@ fn bench_compressed_snark(c: &mut Criterion) {
   }
 }
 
-fn bench_compressed_snark_with_computational_commitments(c: &mut Criterion) {
-  // we vary the number of constraints in the step circuit
-  for &num_cons_in_augmented_circuit in [
-    NUM_CONS_VERIFIER_CIRCUIT_PRIMARY,
-    16384,
-    32768,
-    65536,
-    131072,
-    262144,
-  ]
-  .iter()
-  {
-    // number of constraints in the step circuit
-    let num_cons = num_cons_in_augmented_circuit - NUM_CONS_VERIFIER_CIRCUIT_PRIMARY;
+// fn bench_compressed_snark_with_computational_commitments(c: &mut Criterion) {
+//   // we vary the number of constraints in the step circuit
+//   for &num_cons_in_augmented_circuit in [
+//     NUM_CONS_VERIFIER_CIRCUIT_PRIMARY,
+//     16384,
+//     32768,
+//     65536,
+//     131072,
+//     262144,
+//   ]
+//   .iter()
+//   {
+//     // number of constraints in the step circuit
+//     let num_cons = num_cons_in_augmented_circuit - NUM_CONS_VERIFIER_CIRCUIT_PRIMARY;
 
-    let mut group = c.benchmark_group(format!(
-      "CompressedSNARK-Commitments-StepCircuitSize-{num_cons}"
-    ));
-    group
-      .sampling_mode(SamplingMode::Flat)
-      .sample_size(NUM_SAMPLES);
+//     let mut group = c.benchmark_group(format!(
+//       "CompressedSNARK-Commitments-StepCircuitSize-{num_cons}"
+//     ));
+//     group
+//       .sampling_mode(SamplingMode::Flat)
+//       .sample_size(NUM_SAMPLES);
 
-    bench_compressed_snark_internal::<SS1, SS2>(&mut group, num_cons);
+//     bench_compressed_snark_internal::<SS1, SS2>(&mut group, num_cons);
 
-    group.finish();
-  }
-}
+//     group.finish();
+//   }
+// }
 
 #[derive(Clone, Debug, Default)]
 struct NonTrivialCircuit<F: PrimeField> {

@@ -2,48 +2,45 @@
 //! iterations of the `MinRoot` function, thereby realizing a Nova-based verifiable delay function (VDF).
 //! We execute a configurable number of iterations of the `MinRoot` function per step of Nova's recursion.
 use bellpepper_core::{num::AllocatedNum, ConstraintSystem, SynthesisError};
-use ff::Field;
+use ff::PrimeField;
 use flate2::{write::ZlibEncoder, Compression};
 use nova_snark::{
-  provider::{mlkzg::Bn256EngineKZG, GrumpkinEngine},
+  provider::{PallasEngine, VestaEngine},
   traits::{
     circuit::{StepCircuit, TrivialCircuit},
     snark::RelaxedR1CSSNARKTrait,
-    Engine, Group,
+    Engine,
   },
   CompressedSNARK, PublicParams, RecursiveSNARK,
 };
 use num_bigint::BigUint;
 use std::time::Instant;
 
-type E1 = Bn256EngineKZG;
-type E2 = GrumpkinEngine;
-type EE1 = nova_snark::provider::mlkzg::EvaluationEngine<E1>;
+type E1 = PallasEngine;
+type E2 = VestaEngine;
+type EE1 = nova_snark::provider::ipa_pc::EvaluationEngine<E1>;
 type EE2 = nova_snark::provider::ipa_pc::EvaluationEngine<E2>;
-type S1 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E1, EE1>; // non-preprocessing SNARK
-type S2 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
+type S1 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E1, EE1>;
+type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>;
 
 #[derive(Clone, Debug)]
-struct MinRootIteration<G: Group> {
-  x_i: G::Scalar,
-  y_i: G::Scalar,
-  x_i_plus_1: G::Scalar,
-  y_i_plus_1: G::Scalar,
+struct MinRootIteration<F: PrimeField> {
+  x_i: F,
+  y_i: F,
+  x_i_plus_1: F,
+  y_i_plus_1: F,
 }
 
-impl<G: Group> MinRootIteration<G> {
+impl<F: PrimeField> MinRootIteration<F> {
   // produces a sample non-deterministic advice, executing one invocation of MinRoot per step
-  fn new(num_iters: usize, x_0: &G::Scalar, y_0: &G::Scalar) -> (Vec<G::Scalar>, Vec<Self>) {
-    // exp = (p - 3 / 5), where p is the order of the group
-    // x^{exp} mod p provides the fifth root of x
-    let exp = {
-      let p = G::group_params().2.to_biguint().unwrap();
-      let two = BigUint::parse_bytes(b"2", 10).unwrap();
-      let three = BigUint::parse_bytes(b"3", 10).unwrap();
-      let five = BigUint::parse_bytes(b"5", 10).unwrap();
-      let five_inv = five.modpow(&(&p - &two), &p);
-      (&five_inv * (&p - &three)) % &p
-    };
+  fn new(num_iters: usize, x_0: &F, y_0: &F) -> (Vec<F>, Vec<Self>) {
+    // although this code is written generically, it is tailored to Pallas' scalar field
+    // (p - 3 / 5)
+    let exp = BigUint::parse_bytes(
+      b"23158417847463239084714197001737581570690445185553317903743794198714690358477",
+      10,
+    )
+    .unwrap();
 
     let mut res = Vec::new();
     let mut x_i = *x_0;
@@ -79,21 +76,21 @@ impl<G: Group> MinRootIteration<G> {
 }
 
 #[derive(Clone, Debug)]
-struct MinRootCircuit<G: Group> {
-  seq: Vec<MinRootIteration<G>>,
+struct MinRootCircuit<F: PrimeField> {
+  seq: Vec<MinRootIteration<F>>,
 }
 
-impl<G: Group> StepCircuit<G::Scalar> for MinRootCircuit<G> {
+impl<F: PrimeField> StepCircuit<F> for MinRootCircuit<F> {
   fn arity(&self) -> usize {
     2
   }
 
-  fn synthesize<CS: ConstraintSystem<G::Scalar>>(
+  fn synthesize<CS: ConstraintSystem<F>>(
     &self,
     cs: &mut CS,
-    z: &[AllocatedNum<G::Scalar>],
-  ) -> Result<Vec<AllocatedNum<G::Scalar>>, SynthesisError> {
-    let mut z_out: Result<Vec<AllocatedNum<G::Scalar>>, SynthesisError> =
+    z: &[AllocatedNum<F>],
+  ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
+    let mut z_out: Result<Vec<AllocatedNum<F>>, SynthesisError> =
       Err(SynthesisError::AssignmentMissing);
 
     // use the provided inputs
@@ -143,6 +140,9 @@ fn main() {
   println!("Nova-based VDF with MinRoot delay function");
   println!("=========================================================");
 
+  type C1 = MinRootCircuit<<E1 as Engine>::Scalar>;
+  type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
+
   let num_steps = 10;
   for num_iters_per_step in [1024, 2048, 4096, 8192, 16384, 32768, 65536] {
     // number of iterations of MinRoot per Nova's recursive step
@@ -165,12 +165,7 @@ fn main() {
     // produce public parameters
     let start = Instant::now();
     println!("Producing public parameters...");
-    let pp = PublicParams::<
-      E1,
-      E2,
-      MinRootCircuit<<E1 as Engine>::GE>,
-      TrivialCircuit<<E2 as Engine>::Scalar>,
-    >::setup(
+    let pp = PublicParams::<E1, E2, C1, C2>::setup(
       &circuit_primary,
       &circuit_secondary,
       &*S1::ck_floor(),
@@ -197,7 +192,7 @@ fn main() {
     );
 
     // produce non-deterministic advice
-    let (z0_primary, minroot_iterations) = MinRootIteration::<<E1 as Engine>::GE>::new(
+    let (z0_primary, minroot_iterations) = MinRootIteration::<<E1 as Engine>::Scalar>::new(
       num_iters_per_step * num_steps,
       &<E1 as Engine>::Scalar::zero(),
       &<E1 as Engine>::Scalar::one(),
@@ -217,8 +212,6 @@ fn main() {
 
     let z0_secondary = vec![<E2 as Engine>::Scalar::zero()];
 
-    type C1 = MinRootCircuit<<E1 as Engine>::GE>;
-    type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
     // produce a recursive SNARK
     println!("Generating a RecursiveSNARK...");
     let mut recursive_snark: RecursiveSNARK<E1, E2, C1, C2> =
@@ -255,7 +248,7 @@ fn main() {
     assert!(res.is_ok());
 
     // produce a compressed SNARK
-    println!("Generating a CompressedSNARK using Spartan with multilinear KZG...");
+    println!("Generating a CompressedSNARK using Spartan with IPA...");
     let (pk, vk) = CompressedSNARK::<_, _, _, _, S1, S2>::setup(&pp).unwrap();
 
     let start = Instant::now();

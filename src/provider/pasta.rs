@@ -98,7 +98,7 @@ macro_rules! impl_traits {
         $name_compressed::new(self.to_bytes())
       }
 
-      fn from_label(label: &'static [u8], n: usize) -> Vec<Self::PreprocessedGroupElement> {
+      fn from_label(label: &[u8], n: usize) -> Vec<Self::PreprocessedGroupElement> {
         let mut shake = Shake256::default();
         shake.update(label);
         let mut reader = shake.finalize_xof();

@@ -105,7 +105,7 @@ impl DlogGroup for G2 {
     self.to_bytes()
   }
 
-  fn from_label(_label: &'static [u8], _n: usize) -> Vec<Self::PreprocessedGroupElement> {
+  fn from_label(_label: &[u8], _n: usize) -> Vec<Self::PreprocessedGroupElement> {
     unimplemented!()
   }
 

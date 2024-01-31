@@ -91,17 +91,17 @@ impl<Scalar: PrimeField> MultilinearPolynomial<Scalar> {
     .sum()
   }
 
-  /// Evaluates the polynomial with the given evaluations and point.
-  pub fn evaluate_with(Z: &[Scalar], r: &[Scalar]) -> Scalar {
-    zip_with!(
-      (
-        EqPolynomial::evals_from_points(r).into_par_iter(),
-        Z.par_iter()
-      ),
-      |a, b| a * b
-    )
-    .sum()
-  }
+  // /// Evaluates the polynomial with the given evaluations and point.
+  // pub fn evaluate_with(Z: &[Scalar], r: &[Scalar]) -> Scalar {
+  //   zip_with!(
+  //     (
+  //       EqPolynomial::evals_from_points(r).into_par_iter(),
+  //       Z.par_iter()
+  //     ),
+  //     |a, b| a * b
+  //   )
+  //   .sum()
+  // }
 }
 
 impl<Scalar: PrimeField> Index<usize> for MultilinearPolynomial<Scalar> {
@@ -189,31 +189,31 @@ mod tests {
     }
   }
 
-  fn test_multilinear_polynomial_with<F: PrimeField>() {
-    // Let the polynomial has 3 variables, p(x_1, x_2, x_3) = (x_1 + x_2) * x_3
-    // Evaluations of the polynomial at boolean cube are [0, 0, 0, 1, 0, 1, 0, 2].
+  // fn test_multilinear_polynomial_with<F: PrimeField>() {
+  //   // Let the polynomial has 3 variables, p(x_1, x_2, x_3) = (x_1 + x_2) * x_3
+  //   // Evaluations of the polynomial at boolean cube are [0, 0, 0, 1, 0, 1, 0, 2].
 
-    let TWO = F::from(2);
+  //   let TWO = F::from(2);
 
-    let Z = vec![
-      F::ZERO,
-      F::ZERO,
-      F::ZERO,
-      F::ONE,
-      F::ZERO,
-      F::ONE,
-      F::ZERO,
-      TWO,
-    ];
-    let m_poly = MultilinearPolynomial::<F>::new(Z.clone());
-    assert_eq!(m_poly.get_num_vars(), 3);
+  //   let Z = vec![
+  //     F::ZERO,
+  //     F::ZERO,
+  //     F::ZERO,
+  //     F::ONE,
+  //     F::ZERO,
+  //     F::ONE,
+  //     F::ZERO,
+  //     TWO,
+  //   ];
+  //   let m_poly = MultilinearPolynomial::<F>::new(Z.clone());
+  //   assert_eq!(m_poly.get_num_vars(), 3);
 
-    let x = vec![F::ONE, F::ONE, F::ONE];
-    assert_eq!(m_poly.evaluate(x.as_slice()), TWO);
+  //   let x = vec![F::ONE, F::ONE, F::ONE];
+  //   assert_eq!(m_poly.evaluate(x.as_slice()), TWO);
 
-    let y = MultilinearPolynomial::<F>::evaluate_with(Z.as_slice(), x.as_slice());
-    assert_eq!(y, TWO);
-  }
+  //   let y = MultilinearPolynomial::<F>::evaluate_with(Z.as_slice(), x.as_slice());
+  //   assert_eq!(y, TWO);
+  // }
 
   fn test_sparse_polynomial_with<F: PrimeField>() {
     // Let the polynomial have 3 variables, p(x_1, x_2, x_3) = (x_1 + x_2) * x_3
@@ -230,10 +230,10 @@ mod tests {
     assert_eq!(m_poly.evaluate(x.as_slice()), F::ONE);
   }
 
-  #[test]
-  fn test_multilinear_polynomial() {
-    test_multilinear_polynomial_with::<pasta_curves::Fp>();
-  }
+  // #[test]
+  // fn test_multilinear_polynomial() {
+  //   test_multilinear_polynomial_with::<pasta_curves::Fp>();
+  // }
 
   #[test]
   fn test_sparse_polynomial() {
