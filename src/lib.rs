@@ -118,7 +118,7 @@ where
   /// # Example
   ///
   /// ```rust
-  /// # use nova_snark::spartan::ppsnark::RelaxedR1CSSNARK;
+  /// # use nova_snark::spartan::zksnark::RelaxedR1CSSNARK;
   /// # use nova_snark::provider::ipa_pc::EvaluationEngine;
   /// # use nova_snark::provider::{PallasEngine, VestaEngine};
   /// # use nova_snark::traits::{circuit::TrivialCircuit, Engine, snark::RelaxedR1CSSNARKTrait};
