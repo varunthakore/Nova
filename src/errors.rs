@@ -21,6 +21,9 @@ pub enum NovaError {
   /// returned if the supplied witness is not a satisfying witness to a given shape and instance
   #[error("UnSat")]
   UnSat,
+  /// returned if the counter types for the primary and secondary circuit are not the same
+  #[error("MismatchedCounterType")]
+  MismatchedCounterType,
   /// returned when the supplied compressed commitment cannot be decompressed
   #[error("DecompressionError")]
   DecompressionError,

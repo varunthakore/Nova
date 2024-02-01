@@ -20,7 +20,7 @@ use nova_snark::{
     snark::default_ck_hint,
     Engine,
   },
-  PublicParams, RecursiveSNARK,
+  PublicParams, RecursiveSNARK, StepCounterType,
 };
 use sha2::{Digest, Sha256};
 
@@ -45,6 +45,10 @@ impl<Scalar: PrimeField + PrimeFieldBits> Sha256Circuit<Scalar> {
 impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for Sha256Circuit<Scalar> {
   fn arity(&self) -> usize {
     1
+  }
+
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
   }
 
   fn synthesize<CS: ConstraintSystem<Scalar>>(
@@ -163,7 +167,8 @@ fn bench_recursive_snark(c: &mut Criterion) {
       &ttc,
       &*default_ck_hint(),
       &*default_ck_hint(),
-    );
+    )
+    .unwrap();
 
     let circuit_secondary = TrivialCircuit::default();
     let z0_primary = vec![<E1 as Engine>::Scalar::from(2u64)];

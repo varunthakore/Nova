@@ -11,7 +11,7 @@ use nova_snark::{
     snark::RelaxedR1CSSNARKTrait,
     Engine,
   },
-  CompressedSNARK, PublicParams, RecursiveSNARK, StepCounterType,
+  CompressedSNARK, PublicParams, RecursiveSNARK, StepCounterType, FINAL_EXTERNAL_COUNTER,
 };
 use num_bigint::BigUint;
 use std::time::Instant;
@@ -86,7 +86,7 @@ impl<F: PrimeField> StepCircuit<F> for MinRootCircuit<F> {
   }
 
   fn get_counter_type(&self) -> StepCounterType {
-    StepCounterType::Incremental
+    StepCounterType::External
   }
 
   fn synthesize<CS: ConstraintSystem<F>>(
@@ -162,7 +162,7 @@ fn main() {
       ],
     };
 
-    let circuit_secondary = TrivialCircuit::default();
+    let circuit_secondary = TrivialCircuit::new(StepCounterType::External);
 
     println!("Proving {num_iters_per_step} iterations of MinRoot per step");
 
@@ -244,7 +244,7 @@ fn main() {
     // verify the recursive SNARK
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let res = recursive_snark.verify(&pp, num_steps, &z0_primary, &z0_secondary);
+    let res = recursive_snark.verify(&pp, FINAL_EXTERNAL_COUNTER, &z0_primary, &z0_secondary);
     println!(
       "RecursiveSNARK::verify: {:?}, took {:?}",
       res.is_ok(),
@@ -278,7 +278,7 @@ fn main() {
     // verify the compressed SNARK
     println!("Verifying a CompressedSNARK...");
     let start = Instant::now();
-    let res = compressed_snark.verify(&vk, num_steps, &z0_primary, &z0_secondary);
+    let res = compressed_snark.verify(&vk, FINAL_EXTERNAL_COUNTER, &z0_primary, &z0_secondary);
     println!(
       "CompressedSNARK::verify: {:?}, took {:?}",
       res.is_ok(),

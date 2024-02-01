@@ -11,7 +11,7 @@ use nova_snark::{
     snark::RelaxedR1CSSNARKTrait,
     Engine,
   },
-  CompressedSNARK, PublicParams, RecursiveSNARK,
+  CompressedSNARK, PublicParams, RecursiveSNARK, StepCounterType,
 };
 use std::time::Duration;
 
@@ -72,7 +72,8 @@ fn bench_compressed_snark_internal<S1: RelaxedR1CSSNARKTrait<E1>, S2: RelaxedR1C
     &c_secondary,
     &*S1::ck_floor(),
     &*S2::ck_floor(),
-  );
+  )
+  .unwrap();
 
   // Produce prover and verifier keys for CompressedSNARK
   let (pk, vk) = CompressedSNARK::<_, _, _, _, S1, S2>::setup(&pp).unwrap();
@@ -203,6 +204,10 @@ impl<F: PrimeField> NonTrivialCircuit<F> {
 impl<F: PrimeField> StepCircuit<F> for NonTrivialCircuit<F> {
   fn arity(&self) -> usize {
     1
+  }
+
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
   }
 
   fn synthesize<CS: ConstraintSystem<F>>(

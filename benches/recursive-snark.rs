@@ -11,7 +11,7 @@ use nova_snark::{
     snark::default_ck_hint,
     Engine,
   },
-  PublicParams, RecursiveSNARK,
+  PublicParams, RecursiveSNARK, StepCounterType,
 };
 use std::time::Duration;
 
@@ -75,7 +75,8 @@ fn bench_recursive_snark(c: &mut Criterion) {
       &c_secondary,
       &*default_ck_hint(),
       &*default_ck_hint(),
-    );
+    )
+    .unwrap();
 
     // Bench time to produce a recursive SNARK;
     // we execute a certain number of warm-up steps since executing
@@ -152,6 +153,10 @@ impl<F: PrimeField> NonTrivialCircuit<F> {
 impl<F: PrimeField> StepCircuit<F> for NonTrivialCircuit<F> {
   fn arity(&self) -> usize {
     1
+  }
+
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
   }
 
   fn synthesize<CS: ConstraintSystem<F>>(

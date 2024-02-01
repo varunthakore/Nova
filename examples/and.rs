@@ -13,7 +13,7 @@ use nova_snark::{
     snark::RelaxedR1CSSNARKTrait,
     Engine,
   },
-  CompressedSNARK, PublicParams, RecursiveSNARK,
+  CompressedSNARK, PublicParams, RecursiveSNARK, StepCounterType,
 };
 use rand::Rng;
 use std::marker::PhantomData;
@@ -127,6 +127,10 @@ impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for AndCircuit<F> {
     1
   }
 
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
+  }
+
   fn synthesize<CS: ConstraintSystem<F>>(
     &self,
     cs: &mut CS,
@@ -230,7 +234,8 @@ fn main() {
       &circuit_secondary,
       &*S1::ck_floor(),
       &*S2::ck_floor(),
-    );
+    )
+    .unwrap();
     println!("PublicParams::setup, took {:?} ", start.elapsed());
 
     println!(

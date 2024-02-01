@@ -10,7 +10,7 @@ use nova_snark::{
     snark::default_ck_hint,
     Engine,
   },
-  PublicParams,
+  PublicParams, StepCounterType,
 };
 
 type E1 = PallasEngine;
@@ -56,6 +56,10 @@ impl<F: PrimeField> NonTrivialCircuit<F> {
 impl<F: PrimeField> StepCircuit<F> for NonTrivialCircuit<F> {
   fn arity(&self) -> usize {
     1
+  }
+
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
   }
 
   fn synthesize<CS: ConstraintSystem<F>>(

@@ -166,6 +166,7 @@ impl<E: Engine, S: RelaxedR1CSSNARKTrait<E>, C: StepCircuit<E::Scalar>> DirectSN
 mod tests {
   use super::*;
   // use crate::provider::{Bn256Engine, PallasEngine, Secp256k1Engine};
+  use crate::StepCounterType;
   use ::bellpepper_core::{num::AllocatedNum, ConstraintSystem, SynthesisError};
   use core::marker::PhantomData;
   use ff::PrimeField;
@@ -178,6 +179,10 @@ mod tests {
   impl<F: PrimeField> StepCircuit<F> for CubicCircuit<F> {
     fn arity(&self) -> usize {
       1
+    }
+
+    fn get_counter_type(&self) -> StepCounterType {
+      StepCounterType::Incremental
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(

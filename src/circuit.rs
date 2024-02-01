@@ -17,7 +17,7 @@ use crate::{
   traits::{
     circuit::StepCircuit, commitment::CommitmentTrait, Engine, ROCircuitTrait, ROConstantsCircuit,
   },
-  Commitment,
+  Commitment, StepCounterType,
 };
 use bellpepper::gadgets::Assignment;
 use bellpepper_core::{
@@ -261,6 +261,7 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
     cs: &mut CS,
   ) -> Result<Vec<AllocatedNum<E::Base>>, SynthesisError> {
     let arity = self.step_circuit.arity();
+    let counter_type = self.step_circuit.get_counter_type();
 
     // Allocate all witnesses
     let (params, i, z_0, z_i, U, u, T) =
@@ -308,15 +309,32 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
     )?;
 
     // Compute i + 1
-    let i_new = AllocatedNum::alloc(cs.namespace(|| "i + 1"), || {
-      Ok(*i.get_value().get()? + E::Base::ONE)
+    let i_new = AllocatedNum::alloc(cs.namespace(|| "next i"), || match counter_type {
+      StepCounterType::Incremental => Ok(*i.get_value().get()? + E::Base::ONE),
+      StepCounterType::External => {
+        let inc = *is_base_case.get_value().get()? as u64;
+        Ok(*i.get_value().get()? + E::Base::from(inc))
+      }
     })?;
-    cs.enforce(
-      || "check i + 1",
-      |lc| lc,
-      |lc| lc,
-      |lc| lc + i_new.get_variable() - CS::one() - i.get_variable(),
-    );
+
+    match counter_type {
+      StepCounterType::Incremental => {
+        cs.enforce(
+          || "check i + 1",
+          |lc| lc,
+          |lc| lc,
+          |lc| lc + i_new.get_variable() - CS::one() - i.get_variable(),
+        );
+      }
+      StepCounterType::External => {
+        cs.enforce(
+          || "check i + 1 base",
+          |lc| lc,
+          |lc| lc,
+          |lc| lc + i_new.get_variable() - is_base_case.get_variable() - i.get_variable(),
+        );
+      }
+    }
 
     // Compute z_{i+1}
     let z_input = conditionally_select_vec(

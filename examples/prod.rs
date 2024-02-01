@@ -6,7 +6,7 @@ use nova_snark::{
 };
 use nova_snark::{
   traits::circuit::TrivialCircuit, traits::snark::RelaxedR1CSSNARKTrait, CompressedSNARK,
-  PublicParams, RecursiveSNARK,
+  PublicParams, RecursiveSNARK, StepCounterType,
 };
 use std::time::{Duration, Instant};
 
@@ -27,6 +27,10 @@ impl<F: PrimeField> MulTwo<F> {
 impl<F: PrimeField> StepCircuit<F> for MulTwo<F> {
   fn arity(&self) -> usize {
     1
+  }
+
+  fn get_counter_type(&self) -> StepCounterType {
+    StepCounterType::Incremental
   }
 
   fn synthesize<CS: ConstraintSystem<F>>(
@@ -66,7 +70,8 @@ fn main() {
     &circuit_secondary,
     &*S1::ck_floor(),
     &*S2::ck_floor(),
-  );
+  )
+  .unwrap();
 
   let param_gen_time = param_gen_timer.elapsed();
   println!("PublicParams::setup, took {:?} ", param_gen_time);
