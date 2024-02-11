@@ -47,7 +47,6 @@ where
 impl<E: Engine> GetEvalCommitmentsTrait<E> for EvaluationArgument<E>
 where
   E::GE: DlogGroup,
-  // E::CE: CommitmentTrait<E>,
 {
   fn get_eval_commitment(&self, index: usize) -> CompressedCommitment<E> {
     assert!(self.eval_commitments.len() > index);
@@ -65,7 +64,6 @@ impl<E> EvaluationEngineTrait<E> for EvaluationEngine<E>
 where
   E: Engine,
   E::GE: DlogGroup,
-  // E::CE: CommitmentTrait<E>,
   CommitmentKey<E>: CommitmentKeyExtTrait<E>,
 {
   type ProverKey = ProverKey<E>;
@@ -154,14 +152,6 @@ where
       W_folded = w;
     }
 
-    // println!("Up : {:?}", U_folded.comm_x_vec);
-    // println!("Up : {:?}", U_folded.a_vec);
-    // println!("Up : {:?}", U_folded.comm_y);
-
-    // assert_eq!(comms_x_vec.len(), 2);
-    // println!("Cp 0 : {:?}", comms_x_vec[0]);
-    // println!("Cp 0 : {:?}", comms_x_vec[1]);
-
     let ipa = InnerProductArgument::prove(ck, &pk.ck_s, &U_folded, &W_folded, transcript)?;
 
     Ok(EvaluationArgument {
@@ -204,13 +194,6 @@ where
       U_folded = u;
       num_vars = max(num_vars, points[i].len());
     }
-    // println!("Uv : {:?}", U_folded.comm_x_vec);
-    // println!("Uv : {:?}", U_folded.a_vec);
-    // println!("Uv : {:?}", U_folded.comm_y);
-
-    // assert_eq!(comms_x_vec.len(), 2);
-    // println!("Cv 0 : {:?}", comms_x_vec[0]);
-    // println!("Cv 0 : {:?}", comms_x_vec[1]);
 
     arg.ipa.verify(
       &vk.ck_v,
@@ -222,43 +205,6 @@ where
 
     Ok(())
   }
-
-  // fn prove(
-  //   ck: &CommitmentKey<E>,
-  //   pk: &Self::ProverKey,
-  //   transcript: &mut E::TE,
-  //   comm: &Commitment<E>,
-  //   poly: &[E::Scalar],
-  //   point: &[E::Scalar],
-  //   eval: &E::Scalar,
-  // ) -> Result<Self::EvaluationArgument, NovaError> {
-  //   let u = InnerProductInstance::new(comm, &EqPolynomial::new(point.to_vec()).evals(), eval);
-  //   let w = InnerProductWitness::new(poly);
-
-  //   InnerProductArgument::prove(ck, &pk.ck_s, &u, &w, transcript)
-  // }
-
-  // /// A method to verify purported evaluations of a batch of polynomials
-  // fn verify(
-  //   vk: &Self::VerifierKey,
-  //   transcript: &mut E::TE,
-  //   comm: &Commitment<E>,
-  //   point: &[E::Scalar],
-  //   eval: &E::Scalar,
-  //   arg: &Self::EvaluationArgument,
-  // ) -> Result<(), NovaError> {
-  //   let u = InnerProductInstance::new(comm, &EqPolynomial::new(point.to_vec()).evals(), eval);
-
-  //   arg.verify(
-  //     &vk.ck_v,
-  //     &vk.ck_s,
-  //     (2_usize).pow(point.len() as u32),
-  //     &u,
-  //     transcript,
-  //   )?;
-
-  //   Ok(())
-  // }
 }
 
 fn inner_product<T: Field + Send + Sync>(a: &[T], b: &[T]) -> T {
@@ -375,7 +321,6 @@ where
   ) -> (Self, InnerProductInstance<E>, InnerProductWitness<E>)
   where
     E::GE: DlogGroup,
-    // E::CE: CommitmentTrait<E>,
     CommitmentKey<E>: CommitmentKeyExtTrait<E>,
   {
     transcript.dom_sep(Self::protocol_name());
@@ -689,12 +634,10 @@ where
     let delta = CE::<E>::commit(&c_hat, &[d], &r_delta).compress();
     let beta = CE::<E>::commit(&ck_y, &[d], &r_beta).compress();
 
-    // println!("check v : {:?}", transcript.squeeze(b"checktrans").unwrap());
     transcript.absorb(b"beta", &beta);
     transcript.absorb(b"delta", &delta);
 
     let chal = transcript.squeeze(b"chal_z")?;
-    // println!("check p : {:?}", chal);
 
     let z_1 = d + chal * y_hat;
     let z_2 = a_hat * ((chal * r_P_hat) + r_beta) + r_delta;
@@ -875,12 +818,10 @@ where
     let P_comm = E::GE::vartime_multiscalar_mul(&u_sq, &Ls[..]);
 
     // Step 3 in Hyrax's Figure 8
-    // println!("check v : {:?}", transcript.squeeze(b"checktrans").unwrap());
     transcript.absorb(b"beta", &self.beta);
     transcript.absorb(b"delta", &self.delta);
 
     let chal = transcript.squeeze(b"chal_z")?;
-    // println!("check v : {:?}", chal);
 
     // Step 5 in Hyrax's Figure 8
     // P^(chal*a) * beta^a * delta^1

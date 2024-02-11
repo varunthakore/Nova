@@ -63,7 +63,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   pk_ee: EE::ProverKey,
   sumcheck_gens: SumcheckGens<E>,
@@ -78,7 +77,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   vk_ee: EE::VerifierKey,
   sumcheck_gens: SumcheckGens<E>,
@@ -92,7 +90,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
 }
 
@@ -101,7 +98,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   fn new(shape: R1CSShape<E>, vk_ee: EE::VerifierKey) -> Self {
     let scalar_gen = EE::get_scalar_gen_vk(vk_ee.clone());
@@ -120,7 +116,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   /// Returns the digest of the verifier's key.
   fn digest(&self) -> E::Scalar {
@@ -144,7 +139,6 @@ pub struct RelaxedR1CSSNARK<E, EE>
 where
   E: Engine,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   sc_proof_outer: ZKSumcheckProof<E>,
   claims_outer: (
@@ -165,7 +159,6 @@ where
   E: Engine,
   E::GE: DlogGroup,
   EE: EvaluationEngineTrait<E>,
-  // E::CE: CommitmentTrait<E>,
 {
   type ProverKey = ProverKey<E, EE>;
   type VerifierKey = VerifierKey<E, EE>;
