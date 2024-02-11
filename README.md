@@ -1,3 +1,11 @@
+
+# This fork of Nova implements zero-knowledge in the parent repository by adding the following features:
+1. implement hiding Pedersen commitments
+2. hide the number of steps
+3. implement zero-knowledge Sumcheck and hiding IPA in the final proof compression 
+
+Most of the commits have been adapted from [github.com/sga001/Nova](https://github.com/sga001/Nova). 
+
 # Nova: High-speed recursive arguments from folding schemes
 
 Nova is a high-speed recursive SNARK (a SNARK is type cryptographic proof system that enables a prover to prove a mathematical statement to a verifier with a short proof and succinct verification, and a recursive SNARK enables producing proofs that prove statements about prior proofs). 
