@@ -1,5 +1,7 @@
 //! Support for generating R1CS shape using bellpepper.
 //! `TestShapeCS` implements a superset of `ShapeCS`, adding non-trivial namespace support for use in testing.
+#![allow(dead_code)]
+#![allow(unused)]
 
 use std::{
   cmp::Ordering,
