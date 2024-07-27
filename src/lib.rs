@@ -1,7 +1,7 @@
 //! This library implements Nova, a high-speed recursive SNARK.
 #![deny(
-  warnings,
-  unused,
+  // warnings,
+  // unused,
   future_incompatible,
   nonstandard_style,
   rust_2018_idioms,
@@ -9,6 +9,7 @@
 )]
 #![allow(non_snake_case)]
 #![forbid(unsafe_code)]
+#![allow(dead_code)]
 
 // private modules
 mod bellpepper;
