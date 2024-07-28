@@ -44,6 +44,7 @@ use nifs::NIFS;
 use r1cs::{
   CommitmentKeyHint, R1CSInstance, R1CSShape, R1CSWitness, RelaxedR1CSInstance, RelaxedR1CSWitness,
 };
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use traits::{
   circuit::StepCircuit, commitment::CommitmentEngineTrait, snark::RelaxedR1CSSNARKTrait,
@@ -253,6 +254,8 @@ where
   i: usize,
   zi_primary: Vec<E1::Scalar>,
   zi_secondary: Vec<E2::Scalar>,
+  blind_primary: E1::Scalar,
+  blind_secondary: E2::Scalar,
   _p: PhantomData<(C1, C2)>,
 }
 
@@ -277,6 +280,7 @@ where
 
     // base case for the primary
     let mut cs_primary = SatisfyingAssignment::<E1>::new();
+    let blind_next_primary = E1::Scalar::random(OsRng);
     let inputs_primary: NovaAugmentedCircuitInputs<E2> = NovaAugmentedCircuitInputs::new(
       scalar_as_base::<E1>(pp.digest()),
       E1::Scalar::ZERO,
@@ -285,6 +289,8 @@ where
       None,
       None,
       None,
+      E1::Scalar::ZERO,
+      blind_next_primary,
     );
 
     let circuit_primary: NovaAugmentedCircuit<'_, E2, C1> = NovaAugmentedCircuit::new(
@@ -299,6 +305,7 @@ where
 
     // base case for the secondary
     let mut cs_secondary = SatisfyingAssignment::<E2>::new();
+    let blind_next_secondary = E2::Scalar::random(OsRng);
     let inputs_secondary: NovaAugmentedCircuitInputs<E1> = NovaAugmentedCircuitInputs::new(
       pp.digest(),
       E2::Scalar::ZERO,
@@ -307,6 +314,8 @@ where
       None,
       Some(u_primary.clone()),
       None,
+      E2::Scalar::ZERO,
+      blind_next_secondary,
     );
     let circuit_secondary: NovaAugmentedCircuit<'_, E1, C2> = NovaAugmentedCircuit::new(
       &pp.augmented_circuit_params_secondary,
@@ -359,6 +368,8 @@ where
       i: 0,
       zi_primary,
       zi_secondary,
+      blind_primary: blind_next_primary,
+      blind_secondary: blind_next_secondary,
       _p: Default::default(),
     })
   }
@@ -390,6 +401,7 @@ where
     )?;
 
     let mut cs_primary = SatisfyingAssignment::<E1>::new();
+    let blind_next_primary = E1::Scalar::random(OsRng);
     let inputs_primary: NovaAugmentedCircuitInputs<E2> = NovaAugmentedCircuitInputs::new(
       scalar_as_base::<E1>(pp.digest()),
       E1::Scalar::from(self.i as u64),
@@ -398,6 +410,8 @@ where
       Some(self.r_U_secondary.clone()),
       Some(self.l_u_secondary.clone()),
       Some(nifs_secondary.comm_T),
+      self.blind_primary,
+      blind_next_primary,
     );
 
     let circuit_primary: NovaAugmentedCircuit<'_, E2, C1> = NovaAugmentedCircuit::new(
@@ -424,6 +438,7 @@ where
     )?;
 
     let mut cs_secondary = SatisfyingAssignment::<E2>::new();
+    let blind_next_secondary = E2::Scalar::random(OsRng);
     let inputs_secondary: NovaAugmentedCircuitInputs<E1> = NovaAugmentedCircuitInputs::new(
       pp.digest(),
       E2::Scalar::from(self.i as u64),
@@ -432,6 +447,8 @@ where
       Some(self.r_U_primary.clone()),
       Some(l_u_primary),
       Some(nifs_primary.comm_T),
+      self.blind_secondary,
+      blind_next_secondary,
     );
 
     let circuit_secondary: NovaAugmentedCircuit<'_, E1, C2> = NovaAugmentedCircuit::new(
@@ -466,6 +483,9 @@ where
 
     self.r_U_secondary = r_U_secondary;
     self.r_W_secondary = r_W_secondary;
+
+    self.blind_primary = blind_next_primary;
+    self.blind_secondary = blind_next_secondary;
 
     Ok(())
   }
@@ -515,6 +535,7 @@ where
         hasher.absorb(*e);
       }
       self.r_U_secondary.absorb_in_ro(&mut hasher);
+      hasher.absorb(self.blind_primary);
 
       let mut hasher2 = <E1 as Engine>::RO::new(
         pp.ro_consts_primary.clone(),
@@ -529,6 +550,7 @@ where
         hasher2.absorb(*e);
       }
       self.r_U_primary.absorb_in_ro(&mut hasher2);
+      hasher2.absorb(self.blind_secondary);
 
       (
         hasher.squeeze(NUM_HASH_BITS),
@@ -649,6 +671,9 @@ where
   zn_primary: Vec<E1::Scalar>,
   zn_secondary: Vec<E2::Scalar>,
 
+  blind_primary: E1::Scalar,
+  blind_secondary: E2::Scalar,
+
   _p: PhantomData<(C1, C2)>,
 }
 
@@ -746,6 +771,9 @@ where
       zn_primary: recursive_snark.zi_primary.clone(),
       zn_secondary: recursive_snark.zi_secondary.clone(),
 
+      blind_primary: recursive_snark.blind_primary,
+      blind_secondary: recursive_snark.blind_secondary,
+
       _p: Default::default(),
     })
   }
@@ -786,6 +814,7 @@ where
         hasher.absorb(*e);
       }
       self.r_U_secondary.absorb_in_ro(&mut hasher);
+      hasher.absorb(self.blind_primary);
 
       let mut hasher2 = <E1 as Engine>::RO::new(
         vk.ro_consts_primary.clone(),
@@ -800,6 +829,7 @@ where
         hasher2.absorb(*e);
       }
       self.r_U_primary.absorb_in_ro(&mut hasher2);
+      hasher2.absorb(self.blind_secondary);
 
       (
         hasher.squeeze(NUM_HASH_BITS),
@@ -949,19 +979,19 @@ mod tests {
     test_pp_digest_with::<PallasEngine, VestaEngine, _, _>(
       &TrivialCircuit::<_>::default(),
       &TrivialCircuit::<_>::default(),
-      &expect!["a69d6cf6d014c3a5cc99b77afc86691f7460faa737207dd21b30e8241fae8002"],
+      &expect!["98a04fd47ba4fdd12141b33f03e1aa7e1f58c426c63b04c6df9e4bdfd072c302"],
     );
 
     test_pp_digest_with::<Bn256EngineIPA, GrumpkinEngine, _, _>(
       &TrivialCircuit::<_>::default(),
       &TrivialCircuit::<_>::default(),
-      &expect!["b22ab3456df4bd391804a39fae582b37ed4a8d90ace377337940ac956d87f701"],
+      &expect!["996fbbe325b22557b3b316bcd7f3bc440a56457e927fad6fdd353c6d308dd400"],
     );
 
     test_pp_digest_with::<Secp256k1Engine, Secq256k1Engine, _, _>(
       &TrivialCircuit::<_>::default(),
       &TrivialCircuit::<_>::default(),
-      &expect!["c8aec89a3ea90317a0ecdc9150f4fc3648ca33f6660924a192cafd82e2939b02"],
+      &expect!["13466405712a60d61733f4ffabe6d7206ddce92596892c35a4a95ab040d22b00"],
     );
   }
 
