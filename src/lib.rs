@@ -45,6 +45,7 @@ use nifs::NIFS;
 use r1cs::{
   CommitmentKeyHint, R1CSInstance, R1CSShape, R1CSWitness, RelaxedR1CSInstance, RelaxedR1CSWitness,
 };
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use traits::{
   circuit::StepCircuit,
@@ -274,6 +275,8 @@ where
   i: usize,
   zi_primary: Vec<E1::Scalar>,
   zi_secondary: Vec<E2::Scalar>,
+  blind_primary: E1::Scalar,
+  blind_secondary: E2::Scalar,
   _p: PhantomData<(C1, C2)>,
 }
 
@@ -298,6 +301,7 @@ where
 
     // base case for the primary
     let mut cs_primary = SatisfyingAssignment::<E1>::new();
+    let blind_next_primary = E1::Scalar::random(OsRng);
     let inputs_primary: NovaAugmentedCircuitInputs<E2> = NovaAugmentedCircuitInputs::new(
       scalar_as_base::<E1>(pp.digest()),
       E1::Scalar::ZERO,
@@ -306,6 +310,8 @@ where
       None,
       None,
       None,
+      E1::Scalar::ZERO,
+      blind_next_primary,
     );
 
     let circuit_primary: NovaAugmentedCircuit<'_, E2, C1> = NovaAugmentedCircuit::new(
@@ -320,6 +326,7 @@ where
 
     // base case for the secondary
     let mut cs_secondary = SatisfyingAssignment::<E2>::new();
+    let blind_next_secondary = E2::Scalar::random(OsRng);
     let inputs_secondary: NovaAugmentedCircuitInputs<E1> = NovaAugmentedCircuitInputs::new(
       pp.digest(),
       E2::Scalar::ZERO,
@@ -328,6 +335,8 @@ where
       None,
       Some(u_primary.clone()),
       None,
+      E2::Scalar::ZERO,
+      blind_next_secondary,
     );
     let circuit_secondary: NovaAugmentedCircuit<'_, E1, C2> = NovaAugmentedCircuit::new(
       &pp.augmented_circuit_params_secondary,
@@ -380,6 +389,8 @@ where
       i: 0,
       zi_primary,
       zi_secondary,
+      blind_primary: blind_next_primary,
+      blind_secondary: blind_next_secondary,
       _p: Default::default(),
     })
   }
@@ -413,6 +424,7 @@ where
     )?;
 
     let mut cs_primary = SatisfyingAssignment::<E1>::new();
+    let blind_next_primary = E1::Scalar::random(OsRng);
     let inputs_primary: NovaAugmentedCircuitInputs<E2> = NovaAugmentedCircuitInputs::new(
       scalar_as_base::<E1>(pp.digest()),
       E1::Scalar::from(self.i as u64),
@@ -421,6 +433,8 @@ where
       Some(self.r_U_secondary.clone()),
       Some(self.l_u_secondary.clone()),
       Some(Commitment::<E2>::decompress(&nifs_secondary.comm_T)?),
+      self.blind_primary,
+      blind_next_primary,
     );
 
     let circuit_primary: NovaAugmentedCircuit<'_, E2, C1> = NovaAugmentedCircuit::new(
@@ -447,6 +461,7 @@ where
     )?;
 
     let mut cs_secondary = SatisfyingAssignment::<E2>::new();
+    let blind_next_secondary = E2::Scalar::random(OsRng);
     let inputs_secondary: NovaAugmentedCircuitInputs<E1> = NovaAugmentedCircuitInputs::new(
       pp.digest(),
       E2::Scalar::from(self.i as u64),
@@ -455,6 +470,8 @@ where
       Some(self.r_U_primary.clone()),
       Some(l_u_primary),
       Some(Commitment::<E1>::decompress(&nifs_primary.comm_T)?),
+      self.blind_secondary,
+      blind_next_secondary,
     );
 
     let circuit_secondary: NovaAugmentedCircuit<'_, E1, C2> = NovaAugmentedCircuit::new(
@@ -494,6 +511,9 @@ where
 
     self.r_U_secondary = r_U_secondary;
     self.r_W_secondary = r_W_secondary;
+
+    self.blind_primary = blind_next_primary;
+    self.blind_secondary = blind_next_secondary;
 
     Ok(())
   }
@@ -554,6 +574,7 @@ where
         hasher.absorb(*e);
       }
       self.r_U_secondary.absorb_in_ro(&mut hasher);
+      hasher.absorb(self.blind_primary);
 
       let mut hasher2 = <E1 as Engine>::RO::new(
         pp.ro_consts_primary.clone(),
@@ -568,6 +589,7 @@ where
         hasher2.absorb(*e);
       }
       self.r_U_primary.absorb_in_ro(&mut hasher2);
+      hasher2.absorb(self.blind_secondary);
 
       (
         hasher.squeeze(NUM_HASH_BITS),
@@ -688,6 +710,9 @@ where
   zn_primary: Vec<E1::Scalar>,
   zn_secondary: Vec<E2::Scalar>,
 
+  blind_primary: E1::Scalar,
+  blind_secondary: E2::Scalar,
+
   _p: PhantomData<(C1, C2)>,
 }
 
@@ -785,6 +810,9 @@ where
       zn_primary: recursive_snark.zi_primary.clone(),
       zn_secondary: recursive_snark.zi_secondary.clone(),
 
+      blind_primary: recursive_snark.blind_primary,
+      blind_secondary: recursive_snark.blind_secondary,
+
       _p: Default::default(),
     })
   }
@@ -825,6 +853,7 @@ where
         hasher.absorb(*e);
       }
       self.r_U_secondary.absorb_in_ro(&mut hasher);
+      hasher.absorb(self.blind_primary);
 
       let mut hasher2 = <E1 as Engine>::RO::new(
         vk.ro_consts_primary.clone(),
@@ -839,6 +868,7 @@ where
         hasher2.absorb(*e);
       }
       self.r_U_primary.absorb_in_ro(&mut hasher2);
+      hasher2.absorb(self.blind_secondary);
 
       (
         hasher.squeeze(NUM_HASH_BITS),
@@ -1022,13 +1052,13 @@ mod tests {
     test_pp_digest_with::<PallasEngine, VestaEngine, _, _>(
       &trivial_circuit1,
       &trivial_circuit2,
-      "a5a26e9ac0f68881754d6b001503abcdbe5d67d25ed40280fdf6073b057f7203",
+      "63f9cce7c07f2f78035a4ceb68422188e0b5bb94ca8447b08e497535e5dd7b03",
     );
 
     test_pp_digest_with::<PallasEngine, VestaEngine, _, _>(
       &cubic_circuit1,
       &trivial_circuit2,
-      "3e80717caec550191536a1939c2ef0bf2ef7cdab3b019ced848f8bd0f0aac602",
+      "d54fb84a9af7bf4cfbcbf16d18087434f0a1f8c8c372b0fb0c95303922786603",
     );
 
     let trivial_circuit1_grumpkin = TrivialCircuit::<<Bn256Engine as Engine>::Scalar>::default();
@@ -1038,13 +1068,13 @@ mod tests {
     test_pp_digest_with::<Bn256Engine, GrumpkinEngine, _, _>(
       &trivial_circuit1_grumpkin,
       &trivial_circuit2_grumpkin,
-      "3700f4de72d37422809d01bbcd714e9e428e1d5e5894783e0cabae09e306bb01",
+      "b8c8936ac296ee0cb48c0e7845ff1f9bf63eef166ce76556a43341da269b8b00",
     );
 
     test_pp_digest_with::<Bn256Engine, GrumpkinEngine, _, _>(
       &cubic_circuit1_grumpkin,
       &trivial_circuit2_grumpkin,
-      "21db35ce5b205eecb4d7b4a30f6df811522077472980a0f058a1ddf82e0da403",
+      "1e688534c22a6c05898dc60ffdf7bc12592ff3b4a25fb77735e1b58808ba0a03",
     );
 
     let trivial_circuit1_secp = TrivialCircuit::<<Secp256k1Engine as Engine>::Scalar>::default();
@@ -1054,12 +1084,12 @@ mod tests {
     test_pp_digest_with::<Secp256k1Engine, Secq256k1Engine, _, _>(
       &trivial_circuit1_secp,
       &trivial_circuit2_secp,
-      "4111c7a61aab18fa400788dfe93248114077ab0ef94c323ad87d738c7c639400",
+      "95d5cf1481f8c730b2c215c70216dbf3b2762b17e90a47d95241173056650b03",
     );
     test_pp_digest_with::<Secp256k1Engine, Secq256k1Engine, _, _>(
       &cubic_circuit1_secp,
       &trivial_circuit2_secp,
-      "373588c76b6207617ef2a4e8fe8d49e4f5474b669f48fa6e35be278ff5668501",
+      "e169b1a8b2f889cf985279356764c3f3de9ae02a0c52fd09aca622e47d3c3a01",
     );
   }
 

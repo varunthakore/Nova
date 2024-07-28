@@ -55,6 +55,8 @@ pub struct NovaAugmentedCircuitInputs<E: Engine> {
   U: Option<RelaxedR1CSInstance<E>>,
   u: Option<R1CSInstance<E>>,
   T: Option<Commitment<E>>,
+  blind: E::Base,
+  blind_next: E::Base,
 }
 
 impl<E: Engine> NovaAugmentedCircuitInputs<E> {
@@ -67,6 +69,8 @@ impl<E: Engine> NovaAugmentedCircuitInputs<E> {
     U: Option<RelaxedR1CSInstance<E>>,
     u: Option<R1CSInstance<E>>,
     T: Option<Commitment<E>>,
+    blind: E::Base,
+    blind_next: E::Base,
   ) -> Self {
     Self {
       params,
@@ -76,6 +80,8 @@ impl<E: Engine> NovaAugmentedCircuitInputs<E> {
       U,
       u,
       T,
+      blind,
+      blind_next,
     }
   }
 }
@@ -119,6 +125,8 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
       AllocatedRelaxedR1CSInstance<E>,
       AllocatedR1CSInstance<E>,
       AllocatedPoint<E>,
+      AllocatedNum<E::Base>,
+      AllocatedNum<E::Base>,
     ),
     SynthesisError,
   > {
@@ -174,7 +182,15 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
     )?;
     T.check_on_curve(cs.namespace(|| "check T on curve"))?;
 
-    Ok((params, i, z_0, z_i, U, u, T))
+    // Allocate blind
+    let blind = AllocatedNum::alloc(cs.namespace(|| "blind"), || Ok(self.inputs.get()?.blind))?;
+
+    // Allocate blind
+    let blind_next = AllocatedNum::alloc(cs.namespace(|| "blind_next"), || {
+      Ok(self.inputs.get()?.blind_next)
+    })?;
+
+    Ok((params, i, z_0, z_i, U, u, T, blind, blind_next))
   }
 
   /// Synthesizes base case and returns the new relaxed `R1CSInstance`
@@ -214,9 +230,10 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
     U: &AllocatedRelaxedR1CSInstance<E>,
     u: &AllocatedR1CSInstance<E>,
     T: &AllocatedPoint<E>,
+    blind: &AllocatedNum<E::Base>,
     arity: usize,
   ) -> Result<(AllocatedRelaxedR1CSInstance<E>, AllocatedBit), SynthesisError> {
-    // Check that u.x[0] = Hash(params, U, i, z0, zi)
+    // Check that u.x[0] = Hash(params, i, z0, zi, U, blind)
     let mut ro = E::ROCircuit::new(
       self.ro_consts.clone(),
       NUM_FE_WITHOUT_IO_FOR_CRHF + 2 * arity,
@@ -230,11 +247,12 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
       ro.absorb(e);
     }
     U.absorb_in_ro(cs.namespace(|| "absorb U"), &mut ro)?;
+    ro.absorb(blind);
 
     let hash_bits = ro.squeeze(cs.namespace(|| "Input hash"), NUM_HASH_BITS)?;
     let hash = le_bits_to_num(cs.namespace(|| "bits to hash"), &hash_bits)?;
     let check_pass = alloc_num_equals(
-      cs.namespace(|| "check consistency of u.X[0] with H(params, U, i, z0, zi)"),
+      cs.namespace(|| "check consistency of u.X[0] with H(params, i, z0, zi, U, blind)"),
       &u.X0,
       &hash,
     )?;
@@ -264,7 +282,7 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
     let counter_type = self.step_circuit.get_counter_type();
 
     // Allocate all witnesses
-    let (params, i, z_0, z_i, U, u, T) =
+    let (params, i, z_0, z_i, U, u, T, blind, blind_next) =
       self.alloc_witness(cs.namespace(|| "allocate the circuit witness"), arity)?;
 
     // Compute variable indicating if this is the base case
@@ -285,6 +303,7 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
       &U,
       &u,
       &T,
+      &blind,
       arity,
     )?;
 
@@ -354,7 +373,7 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
       ));
     }
 
-    // Compute the new hash H(params, Unew, i+1, z0, z_{i+1})
+    // Compute the new hash H(params, i+1, z0, z_{i+1}, Unew, blind_next)
     let mut ro = E::ROCircuit::new(self.ro_consts, NUM_FE_WITHOUT_IO_FOR_CRHF + 2 * arity);
     ro.absorb(&params);
     ro.absorb(&i_new);
@@ -365,6 +384,7 @@ impl<'a, E: Engine, SC: StepCircuit<E::Base>> NovaAugmentedCircuit<'a, E, SC> {
       ro.absorb(e);
     }
     Unew.absorb_in_ro(cs.namespace(|| "absorb U_new"), &mut ro)?;
+    ro.absorb(&blind_next);
     let hash_bits = ro.squeeze(cs.namespace(|| "output hash bits"), NUM_HASH_BITS)?;
     let hash = le_bits_to_num(cs.namespace(|| "convert hash to num"), &hash_bits)?;
 
@@ -408,6 +428,8 @@ mod tests {
     E1: Engine<Base = <E2 as Engine>::Scalar>,
     E2: Engine<Base = <E1 as Engine>::Scalar>,
   {
+    let rng = &mut rand::rngs::OsRng;
+
     let tc1 = TrivialCircuit::default();
     // Initialize the shape and ck for the primary
     let circuit1: NovaAugmentedCircuit<'_, E2, TrivialCircuit<<E2 as Engine>::Base>> =
@@ -437,6 +459,8 @@ mod tests {
       None,
       None,
       None,
+      zero1,
+      <<E2 as Engine>::Base as Field>::random(rng.clone()),
     );
     let circuit1: NovaAugmentedCircuit<'_, E2, TrivialCircuit<<E2 as Engine>::Base>> =
       NovaAugmentedCircuit::new(primary_params, Some(inputs1), &tc1, ro_consts1);
@@ -456,6 +480,8 @@ mod tests {
       None,
       Some(inst1),
       None,
+      zero2,
+      <<E1 as Engine>::Base as Field>::random(rng),
     );
     let circuit2: NovaAugmentedCircuit<'_, E1, TrivialCircuit<<E1 as Engine>::Base>> =
       NovaAugmentedCircuit::new(secondary_params, Some(inputs2), &tc2, ro_consts2);
